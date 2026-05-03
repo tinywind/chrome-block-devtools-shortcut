@@ -3,6 +3,11 @@
   "name": "Block Ctrl+Shift+C DevTools Shortcut",
   "version": "1.0.0",
   "description": "Prevents Ctrl+Shift+C from opening Chrome DevTools while letting the keystroke pass through to page-level handlers (e.g., xterm.js terminal copy in ttyd, code-server, browser-based shells).",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
