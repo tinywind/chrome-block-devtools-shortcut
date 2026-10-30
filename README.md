@@ -1,141 +1,120 @@
-# chrome-block-devtools-shortcut
+# Chrome Block DevTools Shortcut
 
-A minimal Google Chrome extension that prevents `Ctrl+Shift+C` from opening DevTools, while preserving the keystroke for page-level handlers — most importantly, web terminal emulators that bind `Ctrl+Shift+C` as the standard "copy" shortcut.
+A Chrome port intended to block `Ctrl+Shift+C` from opening DevTools while
+preserving the keystroke for page handlers, including web terminal copy handlers.
 
-> **Status: Untested in Chrome.**
-> This is a Chrome port of [edge-block-devtools-shortcut](https://github.com/tinywind/edge-block-devtools-shortcut). The Edge variant was developed and verified on Microsoft Edge for Windows. The code in this Chrome variant is **identical** — Manifest V3 is cross-browser, and no browser-specific APIs are used — so the mechanism *should* work in Chrome unchanged. **However, it has not been verified in Google Chrome.** If you try it and find it does not behave as documented, please open an issue.
+## Status
+
+This Chrome port is untested in Google Chrome. The Edge variant was verified
+on Microsoft Edge for Windows. The two variants use identical content scripts,
+but Chrome behavior remains unverified. All Chrome behavior below is expected
+behavior until a Chrome version and platform have been checked.
 
 ## Purpose
 
-Google Chrome (and Chromium broadly) hardcodes `Ctrl+Shift+C` as the **"Open DevTools to the Elements tab"** accelerator. There is no built-in user-facing toggle to disable just this one shortcut without disabling DevTools entirely.
-
-The two obvious "fixes" both have a showstopping side effect: they kill `Ctrl+Shift+C` for *every* page handler, including web terminals that legitimately use it for copy.
-
-| Approach | DevTools blocked | Web terminal copy still works |
-|----------|------------------|-------------------------------|
-| Chrome enterprise `KeyboardShortcutsConfig` policy (registry / GPO) | yes | **no** — policy consumes the keystroke at the browser-chrome level before any page sees it |
-| Chrome Web Store "Disable keyboard shortcuts" extensions | yes | **no** — they call `stopImmediatePropagation()` and kill page handlers |
-| **This extension** | yes (expected) | **yes** (expected) |
-
-The root cause: `Ctrl+Shift+C` is one of Chromium's "reserved" shortcuts, and the standard ways to disable a reserved shortcut all consume the keystroke entirely. Web terminals (xterm.js, ttyd, code-server, Wetty, GoTTY, etc.) standardize on `Ctrl+Shift+C` as their copy binding precisely because `Ctrl+C` is reserved by the shell for SIGINT — but the keystroke never reaches them when DevTools-blocking workarounds are in place.
-
-## How It Works
-
-A content script registered against `<all_urls>` runs at `document_start` on every page and attaches a `keydown` listener in the **capture phase**. When the listener sees `Ctrl+Shift+C`:
-
-1. `event.preventDefault()` — flags the event as `defaultPrevented`. Chrome's DevTools accelerator checks this flag and skips opening DevTools.
-2. `document.execCommand('copy')` — synthesizes a `copy` event on the document. Terminal emulators register `copy` listeners and write their internal selection to the clipboard from there. Regular pages with a DOM text selection get default-copy behavior.
-3. **No `stopImmediatePropagation()`** — the event still propagates, so any page handler that wants to act on the keystroke still receives it.
-
-Net effect: DevTools never opens, and selection-based copy works in both regular pages and web terminals.
+Web terminals such as xterm.js, ttyd and code-server commonly use `Ctrl+Shift+C`
+for copying selected terminal text. The browser also assigns that shortcut to
+DevTools. This extension handles that single accelerator while leaving `F12`,
+`Ctrl+Shift+I` and the Inspect context-menu action available.
 
 ## Installation
 
-Manual developer-mode load (this extension is not on the Chrome Web Store):
+This extension is loaded manually in developer mode and is not published in a
+browser extension store.
 
-1. Clone or download this repo.
+1. Clone or download this repository and extract it if necessary.
 2. Open `chrome://extensions/`.
-3. Enable **Developer mode** (toggle, top-right corner).
-4. Click **Load unpacked**.
-5. Select the cloned directory.
-6. Reload any open tabs to apply.
+3. Enable Developer mode.
+4. Choose Load unpacked and select the directory containing `manifest.json`.
+5. Reload open web pages before using the shortcut.
 
-If you have any other "disable keyboard shortcuts" extension installed, or you applied an enterprise keyboard-shortcut policy, **disable or remove them first**. They will intercept the keystroke before this extension runs and your web terminal copy will still be broken.
+If another shortcut-blocking extension or policy is active, check it when
+troubleshooting. This extension cannot restore an event that another handler
+has already consumed. Disable conflicting handlers and retry on a supported page.
 
 ## Usage
 
-There is no UI, no options page, and no background process. After installation, just press your shortcuts:
+There is no options page, toolbar UI or background process.
 
-| Action | Behavior (expected) |
-|--------|---------------------|
-| `Ctrl+Shift+C` on a regular web page with a text selection | Selected text is copied to the clipboard. DevTools does **not** open. |
-| `Ctrl+Shift+C` in a web terminal (ttyd, code-server, etc.) with terminal text selected | Terminal selection is copied to the clipboard. DevTools does **not** open. |
-| `Ctrl+Shift+C` with nothing selected | No-op. DevTools does **not** open. |
-| `F12` / `Ctrl+Shift+I` | DevTools opens normally. |
-| Right-click → Inspect | DevTools opens normally. |
+| Action | Expected behavior on supported pages |
+| --- | --- |
+| `Ctrl+Shift+C` with regular page text selected | Copy the selection without opening DevTools. |
+| `Ctrl+Shift+C` with text selected in a web terminal | Let the terminal handle copy without opening DevTools. |
+| `Ctrl+Shift+C` without a selection | Suppress the DevTools shortcut; no text is selected to copy. |
+| `F12` or `Ctrl+Shift+I` | Open DevTools normally. |
+| Right-click and choose Inspect | Open DevTools normally. |
 
-To uninstall, remove the entry from `chrome://extensions/`. The extension makes no registry or filesystem changes outside its own directory.
+Copying still depends on the page's selection and copy handlers and the browser's
+clipboard rules. Try both an ordinary text selection and a terminal selection
+when checking a new browser or terminal version.
 
-## Use Cases
+To uninstall, remove the extension from `chrome://extensions/`. It does not
+make registry or filesystem changes outside its own extension directory.
 
-- **Web-based terminals**: `ttyd`, `code-server`'s integrated terminal, Wetty, GoTTY, Eclipse Theia, JetBrains Projector, browser-based SSH gateways, and any xterm.js-powered emulator. These bind `Ctrl+Shift+C` as copy because shells reserve `Ctrl+C` for SIGINT.
-- **Avoiding accidental DevTools popups**: keep `F12` and `Ctrl+Shift+I` working but stop opening DevTools mid-typing when you fat-finger `C` near `Shift`.
-- **Drop-in replacement for failed approaches**: if you tried an enterprise keyboard policy or a Chrome Web Store "disable shortcuts" extension and your web terminals stopped copying, this extension is the targeted fix — it solves only the DevTools accelerator and leaves everything else alone.
-- **Keyboard-driven users on Chromium**: any case where you want a single hardcoded Chromium accelerator silenced without nuking neighboring functionality.
+## How it works
+
+The Manifest V3 content script matches `<all_urls>` and runs at `document_start`
+on matching pages and frames. It registers a capture-phase `keydown` listener. When the key is
+`Ctrl+Shift+C` without Alt or Meta, the listener:
+
+1. Calls `event.preventDefault()` to cancel the browser's default action.
+2. Attempts `document.execCommand('copy')`, allowing document copy handlers to
+   supply a selection.
+3. Leaves event propagation intact so page handlers can receive the keystroke.
+
+On supported pages, this is expected to prevent the DevTools accelerator while
+letting the page receive the keystroke and attempt selection-based copying.
 
 ## Customization
 
-The whole logic is 16 lines in [`content.js`](content.js). Edit it directly to change behavior.
+Edit [`content.js`](content.js) directly. To select `Ctrl+Shift+I` instead, change
+`event.code === 'KeyC'` to `event.code === 'KeyI'` while keeping the modifier checks.
 
-Block a different shortcut — e.g., `Ctrl+Shift+I` instead:
-
-```javascript
-// Change the key code check from KeyC to KeyI
-event.code === 'KeyI'
-```
-
-Block multiple shortcuts — turn the predicate into an array:
+To select both shortcuts, replace that key-code comparison with:
 
 ```javascript
-const blocked = [
-  { ctrl: true, shift: true, code: 'KeyC' },
-  { ctrl: true, shift: true, code: 'KeyI' },
-];
-const matches = blocked.some(
-  (b) =>
-    event.ctrlKey === b.ctrl &&
-    event.shiftKey === b.shift &&
-    event.code === b.code
-);
-if (matches) {
-  event.preventDefault();
-  document.execCommand('copy');
-}
+['KeyC', 'KeyI'].includes(event.code)
 ```
 
-Drop the copy synthesis (just block, no copy):
+To suppress the accelerator without synthesizing a copy event, remove the
+`document.execCommand('copy')` call. These edits change the documented behavior;
+check the resulting shortcut on the intended browser and page.
 
-```javascript
-event.preventDefault();
-// remove the document.execCommand('copy') line
-```
-
-Reload the extension from `chrome://extensions/` (the reload icon on the extension card) after editing, then refresh open tabs.
+After editing, reload the extension from `chrome://extensions/`, then refresh
+open web pages.
 
 ## Limitations
 
-Content scripts cannot run on browser-internal pages:
+Content scripts cannot run on browser-internal or restricted store pages,
+including:
 
-- `chrome://*`
+- `chrome://*` and settings pages
 - The new-tab page
 - The Chrome Web Store
-- Settings pages
 
-On those pages, `Ctrl+Shift+C` will still open DevTools. This is a hard restriction enforced by the extension platform itself — no extension in any Chromium browser can override it.
-
-If full coverage on internal pages matters, you need an OS-level keystroke interceptor (AutoHotkey on Windows, Hammerspoon on macOS, or similar). For most users this isn't worth the setup cost.
+The extension does not intercept `Ctrl+Shift+C` on those pages. If interception
+there is required, use an operating-system shortcut tool, such as AutoHotkey or
+PowerToys Keyboard Manager on Windows or Hammerspoon on macOS.
 
 ## Files
 
 | File | Purpose |
-|------|---------|
-| `manifest.json` | Manifest V3 declaration with one `<all_urls>` content script |
-| `content.js` | Capture-phase `keydown` listener |
-| `README.md` | This file |
-| `LICENSE` | MIT |
+| --- | --- |
+| `manifest.json` | Manifest V3 declaration for the content script and icons. |
+| `content.js` | Capture-phase shortcut listener. |
+| `PRIVACY.md` | Privacy information. |
+| `LICENSE` | MIT license. |
 
 ## Background
 
-This extension exists because of how Chromium chose to handle DevTools shortcuts. Relevant context:
-
-- [Chromium issue 33056](https://groups.google.com/a/chromium.org/g/chromium-bugs/c/Ntc1byZXHfU) — original "reserved Ctrl keys" design decision (Chrome 4 era)
-- [Chromium issue 174309](https://bugs.chromium.org/p/chromium/issues/detail?id=174309) — DevTools shortcut customization request; partially shipped, but does not cover the *opening* shortcuts (`F12`, `Ctrl+Shift+I`, `Ctrl+Shift+C`)
-- [xterm.js issue #292](https://github.com/xtermjs/xterm.js/issues/292) — context for why web terminals standardized on `Ctrl+Shift+C` as copy
+- [Chromium issue 33056](https://groups.google.com/a/chromium.org/g/chromium-bugs/c/Ntc1byZXHfU): background on reserved Ctrl shortcuts.
+- [Chromium issue 174309](https://bugs.chromium.org/p/chromium/issues/detail?id=174309): DevTools shortcut customization discussion.
+- [xterm.js issue 292](https://github.com/xtermjs/xterm.js/issues/292): terminal copy-shortcut discussion.
 
 ## Related
 
-- [edge-block-devtools-shortcut](https://github.com/tinywind/edge-block-devtools-shortcut) — the Microsoft Edge variant of this extension, which has been verified on Edge for Windows.
+- [edge-block-devtools-shortcut](https://github.com/tinywind/edge-block-devtools-shortcut): the Microsoft Edge variant, verified on Edge for Windows.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE).
